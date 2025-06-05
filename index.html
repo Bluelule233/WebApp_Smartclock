@@ -5,15 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>STM32 Device Control</title>
     <style>
-        body { font-family: sans-serif; background-color: #f0f2f5; margin: 2em; }
-        .container { max-width: 500px; margin: auto; padding: 2em; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        h1, h2 { color: #333; }
-        .input-group { margin-bottom: 1em; }
-        label { display: block; margin-bottom: 0.5em; font-weight: bold; }
-        input { width: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
-        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f0f2f5; margin: 2em; color: #333; }
+        .container { max-width: 500px; margin: auto; padding: 2em; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        h1, h2 { color: #1d2129; border-bottom: 1px solid #dddfe2; padding-bottom: 0.5em;}
+        .input-group { margin-bottom: 1.5em; }
+        label { display: block; margin-bottom: 0.5em; font-weight: bold; color: #606770;}
+        input { width: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1em; }
+        button { padding: 12px 18px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1em; font-weight: bold; }
         button:hover { background-color: #0056b3; }
-        #status { margin-top: 1em; padding: 1em; background-color: #e9ecef; border-radius: 4px; }
+        #status { margin-top: 1em; padding: 1em; background-color: #e9ecef; border-radius: 6px; line-height: 1.5; }
+        b { color: #000; }
     </style>
 </head>
 <body>
@@ -34,15 +35,15 @@
 
     <button onclick="updateSettings()">Update Device Settings</button>
 
-    <h2>Current Settings</h2>
+    <h2>Current Settings on Server</h2>
     <div id="status">Loading...</div>
 </div>
 
 <script>
-    // --- CONFIGURATION ---
-    const BIN_ID = '684206418561e97a50201cf4'; // <<< PASTE YOUR BIN ID HERE
-    const API_KEY = '$2a$10$ihkcwizMyl8YVBE6YwgkguCTk9KRc41tPArGQLDxH61JQZOBFtrPu'; // <<< PASTE YOUR X-Master-Key HERE
-    // -------------------
+    // --- CONFIGURATION - Your specific keys are filled in ---
+    const BIN_ID = '684206418561e97a50201cf4';
+    const API_KEY = '$2a$10$ihkcwizMyl8YVBE6YwgkguCTk9KRc41tPArGQLDxH61JQZOBFtrPu';
+    // --------------------------------------------------------
 
     const binUrl = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
     const statusDiv = document.getElementById('status');
@@ -51,38 +52,32 @@
     const minuteInput = document.getElementById('minute');
 
     // Function to fetch and display the current settings when the page loads
-    // In index.html, inside the <script> tag
+    async function getCurrentSettings() {
+        statusDiv.textContent = 'Fetching current settings...';
+        try {
+            // CORRECTED: Added the headers object with the API key to authenticate the read request
+            const response = await fetch(`${binUrl}/latest`, {
+                method: 'GET',
+                headers: {
+                    'X-Master-Key': API_KEY 
+                }
+            });
 
-// This is the function to replace
-async function getCurrentSettings() {
-    statusDiv.textContent = 'Fetching current settings...';
-    try {
-        // --- THIS IS THE CORRECTED PART ---
-        // We need to add the headers object with the API key for the GET request
-        const response = await fetch(`${binUrl}/latest`, {
-            method: 'GET', // Optional for GET requests, but good for clarity
-            headers: {
-                'X-Master-Key': API_KEY // <<< THIS HEADER IS THE FIX
-            }
-        });
-        // --- END OF CORRECTION ---
-
-        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-        
-        const data = await response.json();
-        // The rest of the function displays the data and is correct
-        statusDiv.innerHTML = `
-            <b>ZIP Code:</b> ${data.record.zip_code}<br>
-            <b>Time to Set:</b> HH=${data.record.set_time_hh}, MM=${data.record.set_time_mm}<br>
-            <em>(STM32 will apply time if HH/MM are 0 or greater)</em><br>
-            <b>Last Updated:</b> ${new Date(data.record.last_updated).toLocaleString()}
-        `;
-        zipInput.value = data.record.zip_code;
-    } catch (error) {
-        statusDiv.textContent = `Error fetching settings: ${error.message}`;
-        console.error("Fetch Error:", error); // Added for more detailed browser console error
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            const data = await response.json();
+            statusDiv.innerHTML = `
+                <b>ZIP Code:</b> ${data.record.zip_code}<br>
+                <b>Time to Set:</b> HH=${data.record.set_time_hh}, MM=${data.record.set_time_mm}<br>
+                <em>(STM32 will apply time if HH/MM are >= 0)</em><br>
+                <b>Last Updated:</b> ${new Date(data.record.last_updated).toLocaleString()}
+            `;
+            zipInput.value = data.record.zip_code;
+        } catch (error) {
+            statusDiv.textContent = `Error fetching settings: ${error.message}`;
+            console.error("Fetch Error:", error);
+        }
     }
-}
 
     // Function to update the settings when the button is clicked
     async function updateSettings() {
@@ -112,17 +107,22 @@ async function getCurrentSettings() {
 
             if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
             
-            statusDiv.textContent = 'Settings updated successfully! Your STM32 will fetch them shortly.';
-            // Clear time inputs after successful update
+            statusDiv.textContent = 'Settings updated successfully! Your STM32 will fetch them on its next cycle.';
+            
+            // Clear time inputs after successful update, but leave ZIP code
             hourInput.value = '';
             minuteInput.value = '';
+            
+            // Optionally, refresh the display after a short delay
+            setTimeout(getCurrentSettings, 1500);
 
         } catch (error) {
             statusDiv.textContent = `Error updating settings: ${error.message}`;
+            console.error("Update Error:", error);
         }
     }
 
-    // Load initial settings when the page is opened
+    // Load the initial settings when the page is first opened
     document.addEventListener('DOMContentLoaded', getCurrentSettings);
 </script>
 
