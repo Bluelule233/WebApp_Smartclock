@@ -51,24 +51,38 @@
     const minuteInput = document.getElementById('minute');
 
     // Function to fetch and display the current settings when the page loads
-    async function getCurrentSettings() {
-        statusDiv.textContent = 'Fetching current settings...';
-        try {
-            const response = await fetch(`${binUrl}/latest`); // Use /latest to get the latest version
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
-            const data = await response.json();
-            statusDiv.innerHTML = `
-                <b>ZIP Code:</b> ${data.record.zip_code}<br>
-                <b>Time to Set:</b> HH=${data.record.set_time_hh}, MM=${data.record.set_time_mm}<br>
-                <em>(STM32 will apply time if HH/MM are 0 or greater)</em><br>
-                <b>Last Updated:</b> ${new Date(data.record.last_updated).toLocaleString()}
-            `;
-            zipInput.value = data.record.zip_code;
-        } catch (error) {
-            statusDiv.textContent = `Error fetching settings: ${error.message}`;
-        }
+    // In index.html, inside the <script> tag
+
+// This is the function to replace
+async function getCurrentSettings() {
+    statusDiv.textContent = 'Fetching current settings...';
+    try {
+        // --- THIS IS THE CORRECTED PART ---
+        // We need to add the headers object with the API key for the GET request
+        const response = await fetch(`${binUrl}/latest`, {
+            method: 'GET', // Optional for GET requests, but good for clarity
+            headers: {
+                'X-Master-Key': API_KEY // <<< THIS HEADER IS THE FIX
+            }
+        });
+        // --- END OF CORRECTION ---
+
+        if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+        
+        const data = await response.json();
+        // The rest of the function displays the data and is correct
+        statusDiv.innerHTML = `
+            <b>ZIP Code:</b> ${data.record.zip_code}<br>
+            <b>Time to Set:</b> HH=${data.record.set_time_hh}, MM=${data.record.set_time_mm}<br>
+            <em>(STM32 will apply time if HH/MM are 0 or greater)</em><br>
+            <b>Last Updated:</b> ${new Date(data.record.last_updated).toLocaleString()}
+        `;
+        zipInput.value = data.record.zip_code;
+    } catch (error) {
+        statusDiv.textContent = `Error fetching settings: ${error.message}`;
+        console.error("Fetch Error:", error); // Added for more detailed browser console error
     }
+}
 
     // Function to update the settings when the button is clicked
     async function updateSettings() {
