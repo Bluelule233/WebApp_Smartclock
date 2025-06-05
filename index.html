@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STM32 Device Control</title>
+    <style>
+        body { font-family: sans-serif; background-color: #f0f2f5; margin: 2em; }
+        .container { max-width: 500px; margin: auto; padding: 2em; background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        h1, h2 { color: #333; }
+        .input-group { margin-bottom: 1em; }
+        label { display: block; margin-bottom: 0.5em; font-weight: bold; }
+        input { width: 100px; padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 15px; background-color: #007bff; color: white; border: none; border-radius: 4px; cursor: pointer; }
+        button:hover { background-color: #0056b3; }
+        #status { margin-top: 1em; padding: 1em; background-color: #e9ecef; border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>STM32 Remote Control</h1>
+
+    <div class="input-group">
+        <label for="zip">Set Weather ZIP Code:</label>
+        <input type="text" id="zip" placeholder="e.g., 93405">
+    </div>
+
+    <div class="input-group">
+        <label>Set RTC Time (24h format):</label>
+        <input type="number" id="hour" min="0" max="23" placeholder="HH"> : 
+        <input type="number" id="minute" min="0" max="59" placeholder="MM">
+    </div>
+
+    <button onclick="updateSettings()">Update Device Settings</button>
+
+    <h2>Current Settings</h2>
+    <div id="status">Loading...</div>
+</div>
+
+<script>
+    // --- CONFIGURATION ---
+    const BIN_ID = 'YOUR_BIN_ID_HERE'; // <<< PASTE YOUR BIN ID HERE
+    const API_KEY = 'YOUR_API_KEY_HERE'; // <<< PASTE YOUR X-Master-Key HERE
+    // -------------------
+
+    const binUrl = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
+    const statusDiv = document.getElementById('status');
+    const zipInput = document.getElementById('zip');
+    const hourInput = document.getElementById('hour');
+    const minuteInput = document.getElementById('minute');
+
+    // Function to fetch and display the current settings when the page loads
+    async function getCurrentSettings() {
+        statusDiv.textContent = 'Fetching current settings...';
+        try {
+            const response = await fetch(`${binUrl}/latest`); // Use /latest to get the latest version
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            const data = await response.json();
+            statusDiv.innerHTML = `
+                <b>ZIP Code:</b> ${data.record.zip_code}<br>
+                <b>Time to Set:</b> HH=${data.record.set_time_hh}, MM=${data.record.set_time_mm}<br>
+                <em>(STM32 will apply time if HH/MM are 0 or greater)</em><br>
+                <b>Last Updated:</b> ${new Date(data.record.last_updated).toLocaleString()}
+            `;
+            zipInput.value = data.record.zip_code;
+        } catch (error) {
+            statusDiv.textContent = `Error fetching settings: ${error.message}`;
+        }
+    }
+
+    // Function to update the settings when the button is clicked
+    async function updateSettings() {
+        statusDiv.textContent = 'Updating...';
+
+        const newZip = zipInput.value;
+        const newHour = parseInt(hourInput.value, 10);
+        const newMinute = parseInt(minuteInput.value, 10);
+
+        // Prepare the data payload. Use -1 if time fields are empty.
+        const dataToUpdate = {
+            zip_code: newZip,
+            set_time_hh: isNaN(newHour) ? -1 : newHour,
+            set_time_mm: isNaN(newMinute) ? -1 : newMinute,
+            last_updated: new Date().toISOString()
+        };
+
+        try {
+            const response = await fetch(binUrl, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-Master-Key': API_KEY
+                },
+                body: JSON.stringify(dataToUpdate)
+            });
+
+            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+            
+            statusDiv.textContent = 'Settings updated successfully! Your STM32 will fetch them shortly.';
+            // Clear time inputs after successful update
+            hourInput.value = '';
+            minuteInput.value = '';
+
+        } catch (error) {
+            statusDiv.textContent = `Error updating settings: ${error.message}`;
+        }
+    }
+
+    // Load initial settings when the page is opened
+    document.addEventListener('DOMContentLoaded', getCurrentSettings);
+</script>
+
+</body>
+</html>
