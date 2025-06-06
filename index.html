@@ -43,27 +43,24 @@
 <script>
     // --- MQTT CONFIGURATION ---
     const mqttHost = "broker.hivemq.com";
-    const mqttPort = 8000; // IMPORTANT: Use Port 8000 for MQTT over WebSockets
-    const mqttClientId = "webapp_user_" + Math.random().toString(16).substr(2, 8); // Create a random client ID for this session
-    const commandTopic = "bluelule233/smartclock/cmd"; // << MUST MATCH THE TOPIC IN YOUR main.c
+    const mqttPort = 8884; // <<< CHANGE THIS from 8000 to 8884
+    const mqttClientId = "webapp_user_" + Math.random().toString(16).substr(2, 8); 
+    const commandTopic = "bluelule233/smartclock/cmd"; 
     // -------------------------
 
-    const statusDiv = document.getElementById('status');
-    const updateButton = document.getElementById('updateButton');
-    updateButton.disabled = true; // Disable button until connected
+    // ... (the rest of the code is the same until the client.connect call) ...
 
     // Create a client instance using Paho MQTT
     const client = new Paho.Client(mqttHost, mqttPort, mqttClientId);
 
     // Set callback handlers
     client.onConnectionLost = onConnectionLost;
-    // client.onMessageArrived = onMessageArrived; // We are not subscribing to anything in this webapp
-
-    // Connect the client
+    
+    // Connect the client with SSL enabled
     client.connect({
         onSuccess: onConnect,
         onFailure: onFailure,
-        useSSL: false // We are connecting to port 8000, which is not SSL
+        useSSL: true // <<< CHANGE THIS from false to true
     });
 
     // Called when the client connects
