@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>STM32 Device Control</title>
+    <title>STM32 MQTT Control</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.0.1/mqttws31.min.js" type="text/javascript"></script>
     <style>
         body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; background-color: #f0f2f5; margin: 2em; color: #333; }
         .container { max-width: 500px; margin: auto; padding: 2em; background: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
@@ -13,117 +14,124 @@
         input { width: 100px; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-size: 1em; }
         button { padding: 12px 18px; background-color: #007bff; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 1em; font-weight: bold; }
         button:hover { background-color: #0056b3; }
-        #status { margin-top: 1em; padding: 1em; background-color: #e9ecef; border-radius: 6px; line-height: 1.5; }
-        b { color: #000; }
+        button:disabled { background-color: #aaa; }
+        #status { margin-top: 1em; padding: 1em; background-color: #e9ecef; border-radius: 6px; line-height: 1.5; font-family: monospace; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>STM32 Remote Control</h1>
+    <h1>STM32 Remote Control (MQTT)</h1>
 
     <div class="input-group">
         <label for="zip">Set Weather ZIP Code:</label>
-        <input type="text" id="zip" placeholder="e.g., 93405">
+        <input type="text" id="zip" placeholder="e.g., 93405" value="93405">
     </div>
 
     <div class="input-group">
         <label>Set RTC Time (24h format):</label>
-        <input type="number" id="hour" min="0" max="23" placeholder="HH"> : 
+        <input type="number" id="hour" min="0" max="23" placeholder="HH"> :
         <input type="number" id="minute" min="0" max="59" placeholder="MM">
     </div>
 
-    <button onclick="updateSettings()">Update Device Settings</button>
+    <button id="updateButton" onclick="publishSettings()">Update Device Settings</button>
 
-    <h2>Current Settings on Server</h2>
-    <div id="status">Loading...</div>
+    <h2>MQTT Broker Status</h2>
+    <div id="status">Connecting...</div>
 </div>
 
 <script>
-    // --- CONFIGURATION - Your specific keys are filled in ---
-    const BIN_ID = '684206418561e97a50201cf4';
-    const API_KEY = '$2a$10$ihkcwizMyl8YVBE6YwgkguCTk9KRc41tPArGQLDxH61JQZOBFtrPu';
-    // --------------------------------------------------------
+    // --- MQTT CONFIGURATION ---
+    const mqttHost = "broker.hivemq.com";
+    const mqttPort = 8080; // Port for MQTT over WebSockets
+    const mqttClientId = "webapp_user_" + Math.random().toString(16).substr(2, 8); // Create a random client ID
+    const commandTopic = "bluelule233/smartclock/cmd"; // << MUST MATCH THE TOPIC IN YOUR main.c
+    // -------------------------
 
-    const binUrl = `https://api.jsonbin.io/v3/b/${BIN_ID}`;
     const statusDiv = document.getElementById('status');
-    const zipInput = document.getElementById('zip');
-    const hourInput = document.getElementById('hour');
-    const minuteInput = document.getElementById('minute');
+    const updateButton = document.getElementById('updateButton');
+    updateButton.disabled = true; // Disable button until connected
 
-    // Function to fetch and display the current settings when the page loads
-    async function getCurrentSettings() {
-        statusDiv.textContent = 'Fetching current settings...';
-        try {
-            // CORRECTED: Added the headers object with the API key to authenticate the read request
-            const response = await fetch(`${binUrl}/latest`, {
-                method: 'GET',
-                headers: {
-                    'X-Master-Key': API_KEY 
-                }
-            });
+    // Create a client instance
+    const client = new Paho.MQTT.Client(mqttHost, mqttPort, mqttClientId);
 
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
-            const data = await response.json();
-            statusDiv.innerHTML = `
-                <b>ZIP Code:</b> ${data.record.zip_code}<br>
-                <b>Time to Set:</b> HH=${data.record.set_time_hh}, MM=${data.record.set_time_mm}<br>
-                <em>(STM32 will apply time if HH/MM are >= 0)</em><br>
-                <b>Last Updated:</b> ${new Date(data.record.last_updated).toLocaleString()}
-            `;
-            zipInput.value = data.record.zip_code;
-        } catch (error) {
-            statusDiv.textContent = `Error fetching settings: ${error.message}`;
-            console.error("Fetch Error:", error);
+    // Set callback handlers
+    client.onConnectionLost = onConnectionLost;
+    client.onMessageArrived = onMessageArrived;
+
+    // Connect the client
+    client.connect({ onSuccess: onConnect, onFailure: onFailure });
+
+    // Called when the client connects
+    function onConnect() {
+        console.log("Connected to MQTT broker!");
+        statusDiv.textContent = "Connected to broker. Ready to send commands.";
+        updateButton.disabled = false; // Enable the update button
+        // You could subscribe to status topics from your device here if you wanted
+        // client.subscribe("bluelule233/smartclock/status/#");
+    }
+
+    // Called if the connection fails
+    function onFailure(responseObject) {
+        console.log("Connection failed: " + responseObject.errorMessage);
+        statusDiv.textContent = "Connection to broker FAILED: " + responseObject.errorMessage;
+    }
+
+    // Called when the client loses its connection
+    function onConnectionLost(responseObject) {
+        if (responseObject.errorCode !== 0) {
+            console.log("onConnectionLost:" + responseObject.errorMessage);
+            statusDiv.textContent = "Connection lost: " + responseObject.errorMessage;
+            updateButton.disabled = true;
         }
     }
 
-    // Function to update the settings when the button is clicked
-    async function updateSettings() {
-        statusDiv.textContent = 'Updating...';
-
-        const newZip = zipInput.value;
-        const newHour = parseInt(hourInput.value, 10);
-        const newMinute = parseInt(minuteInput.value, 10);
-
-        // Prepare the data payload. Use -1 if time fields are empty.
-        const dataToUpdate = {
-            zip_code: newZip,
-            set_time_hh: isNaN(newHour) ? -1 : newHour,
-            set_time_mm: isNaN(newMinute) ? -1 : newMinute,
-            last_updated: new Date().toISOString()
-        };
-
-        try {
-            const response = await fetch(binUrl, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Master-Key': API_KEY
-                },
-                body: JSON.stringify(dataToUpdate)
-            });
-
-            if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-            
-            statusDiv.textContent = 'Settings updated successfully! Your STM32 will fetch them on its next cycle.';
-            
-            // Clear time inputs after successful update, but leave ZIP code
-            hourInput.value = '';
-            minuteInput.value = '';
-            
-            // Optionally, refresh the display after a short delay
-            setTimeout(getCurrentSettings, 1500);
-
-        } catch (error) {
-            statusDiv.textContent = `Error updating settings: ${error.message}`;
-            console.error("Update Error:", error);
-        }
+    // Called when a message arrives (if you subscribe to any topics)
+    function onMessageArrived(message) {
+        console.log("onMessageArrived:" + message.payloadString);
+        // You could display device status updates here
     }
 
-    // Load the initial settings when the page is first opened
-    document.addEventListener('DOMContentLoaded', getCurrentSettings);
+    // Called when the "Update" button is clicked
+    function publishSettings() {
+        if (!client.isConnected()) {
+            statusDiv.textContent = "Not connected. Please wait or refresh.";
+            return;
+        }
+
+        const newZip = document.getElementById('zip').value;
+        const newHour = parseInt(document.getElementById('hour').value, 10);
+        const newMinute = parseInt(document.getElementById('minute').value, 10);
+
+        let payload = {};
+
+        if (newZip) {
+            payload.zip = newZip;
+        }
+
+        if (!isNaN(newHour) && !isNaN(newMinute)) {
+            payload.hh = newHour;
+            payload.mm = newMinute;
+        }
+
+        if (Object.keys(payload).length === 0) {
+            statusDiv.textContent = "Nothing to update. Enter a ZIP code or a full HH:MM time.";
+            return;
+        }
+
+        const payloadString = JSON.stringify(payload);
+        const message = new Paho.MQTT.Message(payloadString);
+        message.destinationName = commandTopic;
+
+        client.send(message);
+
+        statusDiv.textContent = "Published command: " + payloadString;
+        console.log("Published command: " + payloadString);
+
+        // Clear time inputs after sending
+        document.getElementById('hour').value = '';
+        document.getElementById('minute').value = '';
+    }
 </script>
 
 </body>
