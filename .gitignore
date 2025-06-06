@@ -1,0 +1,94 @@
+# STM32CubeIDE and Eclipse-specific files
+.metadata/
+.settings/
+.project
+.cproject
+.mxproject
+*.launch
+*.svg
+
+# Build output directories
+Debug/
+Release/
+build/
+**/Debug/
+**/Release/
+**/build/
+
+# Generated files and artifacts
+*.o
+*.obj
+*.elf
+*.bin
+*.hex
+*.map
+*.list
+*.d
+*.su
+*.bak
+*.tmp
+*~
+*.swp
+*.swo
+
+# IDE-generated files for specific configurations
+*.user
+*.aps
+*.bak
+*.pdb
+*.ilk
+*.pch
+*.idb
+
+# J-Link files
+*.jlink
+
+# ST-Link GDB server files
+*.gdb
+
+# OpenOCD files
+*.cfg
+*.ocd
+
+# CMSIS Pack related files
+.pack/
+
+# Node.js (if you ever use it for your web app, e.g., in the docs/ folder)
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+
+# Python (if you use any local scripts)
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.env
+venv/
+env/
+
+# OS-specific files
+.DS_Store
+Thumbs.db
+
+# Private configuration files (IMPORTANT for API keys)
+private_config.h
+**/private_config.h
+secrets.h
+**/secrets.h
+
+# Any other user-specific or large generated files
+# If you have other output folders, add them here.
+# Example: MyOutput/
+
+# If your docs folder has its own build process that generates output,
+# you might want to ignore specific subfolders within docs/
+# For example, if you used a static site generator:
+# docs/_site/
+# docs/public/
+# docs/.cache/
+# docs/node_modules/ (already covered by general node_modules)
