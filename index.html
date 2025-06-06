@@ -41,96 +41,103 @@
 </div>
 
 <script>
-    // --- MQTT CONFIGURATION ---
-    const mqttHost = "broker.hivemq.com";
-    const mqttPort = 8884; // <<< CHANGE THIS from 8000 to 8884
-    const mqttClientId = "webapp_user_" + Math.random().toString(16).substr(2, 8); 
-    const commandTopic = "bluelule233/smartclock/cmd"; 
-    // -------------------------
+    document.addEventListener('DOMContentLoaded', function() {
+        // --- MQTT CONFIGURATION ---
+        const mqttHost = "broker.hivemq.com";
+        const mqttPort = 8884; // Port for MQTT over Secure WebSockets (WSS)
+        const mqttClientId = "webapp_user_" + Math.random().toString(16).substr(2, 8);
+        const commandTopic = "bluelule233/smartclock/cmd"; // << MUST MATCH THE TOPIC IN YOUR main.c
+        // -------------------------
 
-    // ... (the rest of the code is the same until the client.connect call) ...
+        // Get references to HTML elements now that we know they exist
+        const statusDiv = document.getElementById('status');
+        const updateButton = document.getElementById('updateButton');
+        updateButton.disabled = true; // Disable button until connected
 
-    // Create a client instance using Paho MQTT
-    const client = new Paho.Client(mqttHost, mqttPort, mqttClientId);
+        // Create a client instance using Paho MQTT
+        const client = new Paho.Client(mqttHost, mqttPort, mqttClientId);
 
-    // Set callback handlers
-    client.onConnectionLost = onConnectionLost;
-    
-    // Connect the client with SSL enabled
-    client.connect({
-        onSuccess: onConnect,
-        onFailure: onFailure,
-        useSSL: true // <<< CHANGE THIS from false to true
-    });
+        // Set callback handlers
+        client.onConnectionLost = onConnectionLost;
+        // client.onMessageArrived = onMessageArrived; // Not needed as we only publish
 
-    // Called when the client connects
-    function onConnect() {
-        console.log("Connected to MQTT broker!");
-        statusDiv.textContent = "Status: Connected to broker.\nReady to send commands.";
-        updateButton.disabled = false; // Enable the update button
-    }
+        // Define the connection options
+        const connectOptions = {
+            onSuccess: onConnect,
+            onFailure: onFailure,
+            useSSL: true // Must be true for secure port 8884
+        };
 
-    // Called if the connection fails
-    function onFailure(responseObject) {
-        const errorMsg = "Connection to broker FAILED: " + responseObject.errorMessage;
-        console.log(errorMsg);
-        statusDiv.textContent = errorMsg;
-    }
+        // Connect the client
+        statusDiv.textContent = 'Status: Connecting...';
+        client.connect(connectOptions);
 
-    // Called when the client loses its connection
-    function onConnectionLost(responseObject) {
-        if (responseObject.errorCode !== 0) {
-            const errorMsg = "Connection lost: " + responseObject.errorMessage;
+        // Called when the client connects
+        function onConnect() {
+            console.log("Connected to MQTT broker!");
+            statusDiv.textContent = "Status: Connected to broker.\nReady to send commands.";
+            updateButton.disabled = false; // Enable the update button
+        }
+
+        // Called if the connection fails
+        function onFailure(responseObject) {
+            const errorMsg = "Connection to broker FAILED: " + responseObject.errorMessage;
             console.log(errorMsg);
-            statusDiv.textContent = "Status: " + errorMsg + "\nPlease refresh the page.";
-            updateButton.disabled = true;
-        }
-    }
-
-    // Called when the "Update" button is clicked
-    function publishSettings() {
-        if (!client.isConnected()) {
-            statusDiv.textContent = "Not connected. Please wait or refresh.";
-            return;
+            statusDiv.textContent = errorMsg;
         }
 
-        const newZip = document.getElementById('zip').value;
-        const newHour = parseInt(document.getElementById('hour').value, 10);
-        const newMinute = parseInt(document.getElementById('minute').value, 10);
-
-        let payload = {};
-        let commandsSent = [];
-
-        if (newZip && newZip.length > 0) {
-            payload.zip = newZip;
-            commandsSent.push(`zip='${newZip}'`);
+        // Called when the client loses its connection
+        function onConnectionLost(responseObject) {
+            if (responseObject.errorCode !== 0) {
+                const errorMsg = "Connection lost: " + responseObject.errorMessage;
+                console.log(errorMsg);
+                statusDiv.textContent = "Status: " + errorMsg + "\nPlease refresh the page.";
+                updateButton.disabled = true;
+            }
         }
 
-        if (!isNaN(newHour) && !isNaN(newMinute)) {
-            payload.hh = newHour;
-            payload.mm = newMinute;
-            commandsSent.push(`time='${newHour}:${newMinute}'`);
+        // Make the publishSettings function available globally so the button's onclick can find it
+        window.publishSettings = function() {
+            if (!client.isConnected()) {
+                statusDiv.textContent = "Not connected. Please wait or refresh.";
+                return;
+            }
+
+            const newZip = document.getElementById('zip').value;
+            const newHour = parseInt(document.getElementById('hour').value, 10);
+            const newMinute = parseInt(document.getElementById('minute').value, 10);
+
+            let payload = {};
+
+            if (newZip && newZip.length >= 5) {
+                payload.zip = newZip;
+            }
+
+            if (!isNaN(newHour) && !isNaN(newMinute)) {
+                payload.hh = newHour;
+                payload.mm = newMinute;
+            }
+
+            if (Object.keys(payload).length === 0) {
+                statusDiv.textContent = "Status: Nothing to update. Enter a ZIP or a full HH:MM time.";
+                return;
+            }
+
+            const payloadString = JSON.stringify(payload);
+            const message = new Paho.Message(payloadString);
+            message.destinationName = commandTopic;
+            message.qos = 0;
+
+            client.send(message);
+
+            statusDiv.textContent = `Status: Published command to topic '${commandTopic}'.\nPayload: ${payloadString}`;
+            console.log("Published command:", payloadString);
+
+            // Clear time inputs after sending
+            document.getElementById('hour').value = '';
+            document.getElementById('minute').value = '';
         }
-
-        if (Object.keys(payload).length === 0) {
-            statusDiv.textContent = "Status: Nothing to update. Enter a ZIP code or a full HH:MM time.";
-            return;
-        }
-
-        const payloadString = JSON.stringify(payload);
-        const message = new Paho.Message(payloadString);
-        message.destinationName = commandTopic;
-        message.qos = 0; // Set QoS level
-
-        client.send(message);
-
-        statusDiv.textContent = `Status: Published command to topic '${commandTopic}'.\nPayload: ${payloadString}`;
-        console.log("Published command:", payloadString);
-
-        // Clear time inputs after sending
-        document.getElementById('hour').value = '';
-        document.getElementById('minute').value = '';
-    }
+    });
 </script>
 
 </body>
